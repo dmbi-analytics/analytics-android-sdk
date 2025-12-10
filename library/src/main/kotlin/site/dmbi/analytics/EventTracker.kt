@@ -1,21 +1,55 @@
 package site.dmbi.analytics
 
+import android.content.Context
+import android.net.Uri
+import android.util.DisplayMetrics
 import android.util.Log
+import android.view.WindowManager
 import org.json.JSONObject
 import site.dmbi.analytics.models.AnalyticsEvent
+import site.dmbi.analytics.models.ScreenMetadata
+import site.dmbi.analytics.models.UTMParameters
+import java.text.SimpleDateFormat
 import java.util.*
 
 /**
  * Core event tracking functionality
  */
 internal class EventTracker(
+    private val context: Context,
     private val config: DMBIConfiguration,
     private val sessionManager: SessionManager,
     private val networkQueue: NetworkQueue
 ) {
     private var isLoggedIn: Boolean = false
-    private var currentScreen: Triple<String, String, String?>? = null // name, url, title
+    private var currentScreen: ScreenInfo? = null
     private var screenEntryTime: Long? = null
+
+    // Previous screen tracking (like web's previous_page_url)
+    private var previousScreenUrl: String? = null
+    private var previousScreenTitle: String? = null
+
+    // UTM parameters (from deep links)
+    private var currentUTM: UTMParameters? = null
+
+    // Referrer (deep link source, push notification, etc.)
+    private var currentReferrer: String? = null
+
+    // Screen dimensions cache
+    private val screenDimensions: Pair<Int, Int> by lazy {
+        val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val metrics = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        wm.defaultDisplay.getMetrics(metrics)
+        Pair(metrics.widthPixels, metrics.heightPixels)
+    }
+
+    private data class ScreenInfo(
+        val name: String,
+        val url: String,
+        val title: String?,
+        val metadata: ScreenMetadata?
+    )
 
     // MARK: - User State
 
@@ -23,28 +57,64 @@ internal class EventTracker(
         isLoggedIn = loggedIn
     }
 
+    // MARK: - UTM & Referrer
+
+    fun setUTMParameters(utm: UTMParameters) {
+        this.currentUTM = utm
+    }
+
+    fun setReferrer(referrer: String) {
+        this.currentReferrer = referrer
+    }
+
+    fun handleDeepLink(uri: Uri) {
+        // Parse UTM parameters from deep link
+        this.currentUTM = UTMParameters.from(uri)
+        // Set referrer as the deep link scheme
+        this.currentReferrer = uri.scheme ?: "deeplink"
+    }
+
     // MARK: - Screen Tracking
 
-    fun trackScreen(name: String, url: String, title: String?) {
+    fun trackScreen(name: String, url: String, title: String?, metadata: ScreenMetadata? = null) {
         // Track exit from previous screen if any
-        currentScreen?.let { (prevName, prevUrl, prevTitle) ->
-            trackScreenExit(prevName, prevUrl, prevTitle)
+        currentScreen?.let { prev ->
+            trackScreenExit(prev.name, prev.url, prev.title, prev.metadata)
         }
 
+        // Save previous screen info BEFORE updating current
+        previousScreenUrl = currentScreen?.url
+        previousScreenTitle = currentScreen?.title
+
         // Record new screen
-        currentScreen = Triple(name, url, title)
+        currentScreen = ScreenInfo(name, url, title, metadata)
         screenEntryTime = System.currentTimeMillis()
+
+        // Format published date if present
+        var publishedDateString: String? = null
+        metadata?.publishedDate?.let { date ->
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+            dateFormat.timeZone = TimeZone.getTimeZone("UTC")
+            publishedDateString = dateFormat.format(date)
+        }
 
         val event = createEvent(
             eventType = "screen_view",
             pageUrl = url,
             pageTitle = title,
-            customData = mapOf("screen_name" to name)
+            customData = mapOf("screen_name" to name),
+            // Article metadata
+            creator = metadata?.creator,
+            articleAuthor = metadata?.authors?.joinToString(", "),
+            articleSection = metadata?.section,
+            articleKeywords = metadata?.keywords,
+            publishedDate = publishedDateString,
+            contentType = metadata?.contentType
         )
         enqueue(event)
     }
 
-    private fun trackScreenExit(name: String, url: String, title: String?) {
+    private fun trackScreenExit(name: String, url: String, title: String?, metadata: ScreenMetadata?) {
         val entryTime = screenEntryTime ?: return
         val duration = ((System.currentTimeMillis() - entryTime) / 1000).toInt()
 
@@ -63,7 +133,7 @@ internal class EventTracker(
     fun trackAppOpen(isNewSession: Boolean) {
         val event = createEvent(
             eventType = "app_open",
-            pageUrl = currentScreen?.second ?: "app://launch",
+            pageUrl = currentScreen?.url ?: "app://launch",
             pageTitle = null,
             customData = mapOf("is_new_session" to isNewSession)
         )
@@ -72,13 +142,13 @@ internal class EventTracker(
 
     fun trackAppClose() {
         // Track screen exit for current screen
-        currentScreen?.let { (name, url, title) ->
-            trackScreenExit(name, url, title)
+        currentScreen?.let { current ->
+            trackScreenExit(current.name, current.url, current.title, current.metadata)
         }
 
         val event = createEvent(
             eventType = "app_close",
-            pageUrl = currentScreen?.second ?: "app://close",
+            pageUrl = currentScreen?.url ?: "app://close",
             pageTitle = null
         )
         enqueue(event)
@@ -89,8 +159,8 @@ internal class EventTracker(
     fun trackVideoImpression(videoId: String, title: String?, duration: Float?) {
         val event = createEvent(
             eventType = "video_impression",
-            pageUrl = currentScreen?.second ?: "app://video",
-            pageTitle = currentScreen?.third,
+            pageUrl = currentScreen?.url ?: "app://video",
+            pageTitle = currentScreen?.title,
             videoId = videoId,
             videoTitle = title,
             videoDuration = duration
@@ -101,8 +171,8 @@ internal class EventTracker(
     fun trackVideoPlay(videoId: String, title: String?, duration: Float?, position: Float?) {
         val event = createEvent(
             eventType = "video_play",
-            pageUrl = currentScreen?.second ?: "app://video",
-            pageTitle = currentScreen?.third,
+            pageUrl = currentScreen?.url ?: "app://video",
+            pageTitle = currentScreen?.title,
             videoId = videoId,
             videoTitle = title,
             videoDuration = duration,
@@ -114,8 +184,8 @@ internal class EventTracker(
     fun trackVideoProgress(videoId: String, duration: Float?, position: Float?, percent: Int) {
         val event = createEvent(
             eventType = "video_quartile",
-            pageUrl = currentScreen?.second ?: "app://video",
-            pageTitle = currentScreen?.third,
+            pageUrl = currentScreen?.url ?: "app://video",
+            pageTitle = currentScreen?.title,
             videoId = videoId,
             videoDuration = duration,
             videoPosition = position,
@@ -127,8 +197,8 @@ internal class EventTracker(
     fun trackVideoPause(videoId: String, position: Float?, percent: Int?) {
         val event = createEvent(
             eventType = "video_pause",
-            pageUrl = currentScreen?.second ?: "app://video",
-            pageTitle = currentScreen?.third,
+            pageUrl = currentScreen?.url ?: "app://video",
+            pageTitle = currentScreen?.title,
             videoId = videoId,
             videoPosition = position,
             videoPercent = percent
@@ -139,8 +209,8 @@ internal class EventTracker(
     fun trackVideoComplete(videoId: String, duration: Float?) {
         val event = createEvent(
             eventType = "video_complete",
-            pageUrl = currentScreen?.second ?: "app://video",
-            pageTitle = currentScreen?.third,
+            pageUrl = currentScreen?.url ?: "app://video",
+            pageTitle = currentScreen?.title,
             videoId = videoId,
             videoDuration = duration,
             videoPercent = 100
@@ -165,6 +235,9 @@ internal class EventTracker(
     }
 
     fun trackPushOpened(notificationId: String?, title: String?, campaign: String?) {
+        // Set referrer when opening from push
+        this.currentReferrer = "push_notification"
+
         val customData = mutableMapOf<String, Any>()
         notificationId?.let { customData["notification_id"] = it }
         campaign?.let { customData["campaign"] = it }
@@ -183,8 +256,8 @@ internal class EventTracker(
     fun trackHeartbeat() {
         val event = createEvent(
             eventType = "heartbeat",
-            pageUrl = currentScreen?.second ?: "app://heartbeat",
-            pageTitle = currentScreen?.third
+            pageUrl = currentScreen?.url ?: "app://heartbeat",
+            pageTitle = currentScreen?.title
         )
         enqueue(event)
     }
@@ -194,8 +267,8 @@ internal class EventTracker(
     fun trackCustomEvent(name: String, properties: Map<String, Any>?) {
         val event = createEvent(
             eventType = name,
-            pageUrl = currentScreen?.second ?: "app://custom",
-            pageTitle = currentScreen?.third,
+            pageUrl = currentScreen?.url ?: "app://custom",
+            pageTitle = currentScreen?.title,
             customData = properties
         )
         enqueue(event)
@@ -224,7 +297,14 @@ internal class EventTracker(
         videoTitle: String? = null,
         videoDuration: Float? = null,
         videoPosition: Float? = null,
-        videoPercent: Int? = null
+        videoPercent: Int? = null,
+        // Article metadata
+        creator: String? = null,
+        articleAuthor: String? = null,
+        articleSection: String? = null,
+        articleKeywords: List<String>? = null,
+        publishedDate: String? = null,
+        contentType: String? = null
     ): AnalyticsEvent {
         sessionManager.updateActivity()
 
@@ -239,7 +319,7 @@ internal class EventTracker(
             eventType = eventType,
             pageUrl = pageUrl,
             pageTitle = pageTitle,
-            referrer = null,
+            referrer = currentReferrer,
             deviceType = sessionManager.deviceType,
             userAgent = sessionManager.userAgent,
             isLoggedIn = isLoggedIn,
@@ -251,7 +331,26 @@ internal class EventTracker(
             videoTitle = videoTitle,
             videoDuration = videoDuration,
             videoPosition = videoPosition,
-            videoPercent = videoPercent
+            videoPercent = videoPercent,
+            // Article metadata
+            creator = creator,
+            articleAuthor = articleAuthor,
+            articleSection = articleSection,
+            articleKeywords = articleKeywords,
+            publishedDate = publishedDate,
+            contentType = contentType,
+            // Previous screen
+            previousPageUrl = previousScreenUrl,
+            previousPageTitle = previousScreenTitle,
+            // Screen dimensions
+            screenWidth = screenDimensions.first,
+            screenHeight = screenDimensions.second,
+            // UTM parameters
+            utmSource = currentUTM?.source,
+            utmMedium = currentUTM?.medium,
+            utmCampaign = currentUTM?.campaign,
+            utmContent = currentUTM?.content,
+            utmTerm = currentUTM?.term
         )
     }
 

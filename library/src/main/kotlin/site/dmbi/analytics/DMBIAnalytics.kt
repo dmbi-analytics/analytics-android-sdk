@@ -1,7 +1,10 @@
 package site.dmbi.analytics
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
+import site.dmbi.analytics.models.ScreenMetadata
+import site.dmbi.analytics.models.UTMParameters
 
 /**
  * DMBI Analytics SDK for Android
@@ -72,6 +75,7 @@ object DMBIAnalytics {
         }
 
         eventTracker = EventTracker(
+            context = appContext,
             config = config,
             sessionManager = sessionManager!!,
             networkQueue = networkQueue!!
@@ -102,7 +106,7 @@ object DMBIAnalytics {
     // MARK: - Screen Tracking
 
     /**
-     * Track a screen view
+     * Track a screen view (simple version)
      * @param name Screen name (e.g., "ArticleDetail", "Home")
      * @param url Screen URL (e.g., "app://article/123")
      * @param title Optional screen title
@@ -110,7 +114,62 @@ object DMBIAnalytics {
     @JvmStatic
     @JvmOverloads
     fun trackScreen(name: String, url: String, title: String? = null) {
-        eventTracker?.trackScreen(name, url, title)
+        eventTracker?.trackScreen(name, url, title, null)
+    }
+
+    /**
+     * Track a screen view with article metadata
+     * @param name Screen name (e.g., "ArticleDetail", "Home")
+     * @param url Screen URL (e.g., "app://article/123")
+     * @param title Optional screen title
+     * @param metadata Article metadata (authors, section, keywords, etc.)
+     */
+    @JvmStatic
+    fun trackScreen(name: String, url: String, title: String?, metadata: ScreenMetadata) {
+        eventTracker?.trackScreen(name, url, title, metadata)
+    }
+
+    // MARK: - Deep Link & UTM Tracking
+
+    /**
+     * Handle a deep link URI and extract UTM parameters
+     * Call this when your app opens from a deep link
+     * @param uri The deep link URI
+     */
+    @JvmStatic
+    fun handleDeepLink(uri: Uri) {
+        eventTracker?.handleDeepLink(uri)
+    }
+
+    /**
+     * Handle a deep link URL string and extract UTM parameters
+     * @param url The deep link URL string
+     */
+    @JvmStatic
+    fun handleDeepLink(url: String) {
+        try {
+            eventTracker?.handleDeepLink(Uri.parse(url))
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to parse deep link URL: $url")
+        }
+    }
+
+    /**
+     * Set UTM parameters manually
+     * @param utm UTM parameters
+     */
+    @JvmStatic
+    fun setUTMParameters(utm: UTMParameters) {
+        eventTracker?.setUTMParameters(utm)
+    }
+
+    /**
+     * Set referrer source manually
+     * @param referrer Referrer identifier (e.g., "facebook", "twitter", "push_notification")
+     */
+    @JvmStatic
+    fun setReferrer(referrer: String) {
+        eventTracker?.setReferrer(referrer)
     }
 
     // MARK: - Video Tracking
