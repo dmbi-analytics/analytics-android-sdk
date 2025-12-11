@@ -1,6 +1,16 @@
 # DMBI Analytics Android SDK
 
-Native Android SDK for DMBI Analytics platform. Track screen views, video engagement, push notifications, and custom events.
+Native Android SDK for DMBI Analytics platform. Track screen views, video engagement, push notifications, scroll depth, conversions, and custom events.
+
+## Features
+
+- **Heartbeat with Dynamic Intervals**: 30s base interval, increases to 120s when user is inactive
+- **Active Time Tracking**: Only counts foreground time, excludes background
+- **Scroll Depth Tracking**: RecyclerView, NestedScrollView, ScrollView support
+- **User Segments**: Cohort analysis with custom segments
+- **Conversion Tracking**: Track subscriptions, purchases, registrations
+- **Offline Support**: Events are queued and sent when network is available
+- **Automatic Session Management**: New session after 30 min background
 
 ## Installation
 
@@ -20,18 +30,8 @@ Add the dependency:
 
 ```gradle
 dependencies {
-    implementation 'com.github.dmbi-analytics:analytics-android-sdk:1.0.0'
+    implementation 'com.github.dmbi-analytics:analytics-android-sdk:1.1.0'
 }
-```
-
-### Maven
-
-```xml
-<dependency>
-    <groupId>site.dmbi.analytics</groupId>
-    <artifactId>analytics</artifactId>
-    <version>1.0.0</version>
-</dependency>
 ```
 
 ## Quick Start
@@ -57,7 +57,6 @@ class MyApplication : Application() {
 ### 2. Track Screens
 
 ```kotlin
-// In your activities/fragments
 override fun onResume() {
     super.onResume()
     DMBIAnalytics.trackScreen(
@@ -68,7 +67,69 @@ override fun onResume() {
 }
 ```
 
-### 3. Track Videos
+### 3. Scroll Tracking
+
+```kotlin
+// Attach to RecyclerView
+DMBIAnalytics.attachScrollTracking(recyclerView)
+
+// Or NestedScrollView
+DMBIAnalytics.attachScrollTracking(nestedScrollView)
+
+// Or report manually (for custom scroll implementations)
+DMBIAnalytics.reportScrollDepth(75) // 75%
+
+// Get current scroll depth
+val depth = DMBIAnalytics.getCurrentScrollDepth()
+
+// Detach when leaving screen
+DMBIAnalytics.detachScrollTracking()
+```
+
+### 4. User Types & Segments
+
+```kotlin
+// Set user type
+DMBIAnalytics.setUserType(UserType.SUBSCRIBER) // anonymous, logged, subscriber, premium
+
+// Add user segments for cohort analysis
+DMBIAnalytics.addUserSegment("sports_fan")
+DMBIAnalytics.addUserSegment("premium_reader")
+
+// Remove segment
+DMBIAnalytics.removeUserSegment("sports_fan")
+
+// Get all segments
+val segments = DMBIAnalytics.getUserSegments()
+```
+
+### 5. Conversion Tracking
+
+```kotlin
+// Simple conversion
+DMBIAnalytics.trackConversion(
+    id = "sub_123",
+    type = "subscription",
+    value = 99.99,
+    currency = "TRY"
+)
+
+// Detailed conversion with properties
+DMBIAnalytics.trackConversion(
+    Conversion(
+        id = "purchase_456",
+        type = "purchase",
+        value = 149.99,
+        currency = "TRY",
+        properties = mapOf(
+            "product_id" to "prod_123",
+            "category" to "premium"
+        )
+    )
+)
+```
+
+### 6. Video Tracking
 
 ```kotlin
 // Video started playing
@@ -87,13 +148,6 @@ DMBIAnalytics.trackVideoProgress(
     percent = 25
 )
 
-// Video paused
-DMBIAnalytics.trackVideoPause(
-    videoId = "vid123",
-    position = 90f,
-    percent = 50
-)
-
 // Video completed
 DMBIAnalytics.trackVideoComplete(
     videoId = "vid123",
@@ -101,10 +155,10 @@ DMBIAnalytics.trackVideoComplete(
 )
 ```
 
-### 4. Track Push Notifications
+### 7. Push Notifications
 
 ```kotlin
-// In your FirebaseMessagingService
+// In FirebaseMessagingService
 override fun onMessageReceived(remoteMessage: RemoteMessage) {
     DMBIAnalytics.trackPushReceived(
         notificationId = remoteMessage.data["notification_id"],
@@ -114,26 +168,27 @@ override fun onMessageReceived(remoteMessage: RemoteMessage) {
 }
 
 // When notification is opened
-fun handleNotificationOpen(intent: Intent) {
-    DMBIAnalytics.trackPushOpened(
-        notificationId = intent.getStringExtra("notification_id"),
-        title = intent.getStringExtra("title"),
-        campaign = intent.getStringExtra("campaign")
-    )
-}
+DMBIAnalytics.trackPushOpened(
+    notificationId = intent.getStringExtra("notification_id"),
+    title = intent.getStringExtra("title"),
+    campaign = intent.getStringExtra("campaign")
+)
 ```
 
-### 5. User Login State
+### 8. Engagement Metrics
 
 ```kotlin
-// When user logs in
-DMBIAnalytics.setLoggedIn(true)
+// Get active time (excludes background)
+val activeSeconds = DMBIAnalytics.getActiveTimeSeconds()
 
-// When user logs out
-DMBIAnalytics.setLoggedIn(false)
+// Get heartbeat count
+val pingCount = DMBIAnalytics.getPingCounter()
+
+// Record user interaction (resets inactivity timer)
+DMBIAnalytics.recordInteraction()
 ```
 
-### 6. Custom Events
+### 9. Custom Events
 
 ```kotlin
 DMBIAnalytics.trackEvent(
@@ -152,19 +207,31 @@ val config = DMBIConfiguration.Builder(
     siteId = "your-site-android",
     endpoint = "https://realtime.dmbi.site/e"
 )
-    .heartbeatInterval(60_000L)      // Heartbeat every 60 seconds
-    .batchSize(10)                   // Send events in batches of 10
-    .flushInterval(30_000L)          // Flush every 30 seconds
-    .sessionTimeout(30 * 60 * 1000L) // New session after 30 min background
-    .debugLogging(true)              // Enable debug logs
+    .heartbeatInterval(30_000L)        // Base heartbeat: 30 seconds
+    .maxHeartbeatInterval(120_000L)    // Max when inactive: 120 seconds
+    .inactivityThreshold(30_000L)      // Inactive after 30 seconds
+    .batchSize(10)                     // Send events in batches of 10
+    .flushInterval(30_000L)            // Flush every 30 seconds
+    .sessionTimeout(30 * 60 * 1000L)   // New session after 30 min background
+    .debugLogging(true)                // Enable debug logs
     .build()
 
 DMBIAnalytics.configure(this, config)
 ```
 
-## Java Support
+## Comparison with Competitors
 
-The SDK supports both Kotlin and Java:
+| Feature | Chartbeat | Marfeel | DMBI SDK |
+|---------|-----------|---------|----------|
+| Heartbeat | 15s | 10s | 30s (dynamic) |
+| Scroll tracking | ✅ | ✅ | ✅ |
+| Active time | ? | ✅ | ✅ |
+| Dynamic interval | ✅ | ❌ | ✅ |
+| Conversions | ❌ | ✅ | ✅ |
+| User segments | ✅ | ✅ | ✅ |
+| Offline storage | ❌ | ❌ | ✅ |
+
+## Java Support
 
 ```java
 // Java initialization
@@ -173,20 +240,12 @@ DMBIAnalytics.configure(context, "your-site-android", "https://realtime.dmbi.sit
 // Java screen tracking
 DMBIAnalytics.trackScreen("Home", "app://home", "Home Screen");
 
-// Java event tracking
-Map<String, Object> props = new HashMap<>();
-props.put("article_id", "12345");
-DMBIAnalytics.trackEvent("article_view", props);
+// Java user type
+DMBIAnalytics.setUserType(UserType.SUBSCRIBER);
+
+// Java conversion
+DMBIAnalytics.trackConversion("sub_123", "subscription", 99.99, "TRY");
 ```
-
-## Features
-
-- **Automatic Session Management**: Sessions are automatically created on app launch and after 30 minutes of inactivity
-- **Secure User ID**: User ID is stored in EncryptedSharedPreferences and persists across app reinstalls
-- **Offline Support**: Events are queued and sent when network is available
-- **Heartbeat**: Periodic heartbeats enable real-time concurrent user tracking
-- **App Lifecycle**: Automatic tracking of app open/close events via ProcessLifecycleOwner
-- **Video Tracking**: Track video impressions, plays, progress, pauses, and completions
 
 ## Requirements
 
@@ -195,16 +254,12 @@ DMBIAnalytics.trackEvent("article_view", props);
 
 ## Permissions
 
-The SDK requires the following permissions (automatically merged):
-
 ```xml
 <uses-permission android:name="android.permission.INTERNET" />
 <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 ```
 
 ## ProGuard
-
-If using ProGuard, add the following rules:
 
 ```proguard
 -keep class site.dmbi.analytics.** { *; }
