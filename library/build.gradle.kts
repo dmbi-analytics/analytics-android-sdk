@@ -39,6 +39,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-process:2.6.2")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
 
     // Room for offline storage
     implementation("androidx.room:room-runtime:2.6.1")
@@ -54,7 +55,7 @@ publishing {
         register<MavenPublication>("release") {
             groupId = "site.dmbi.analytics"
             artifactId = "analytics"
-            version = "1.0.0"
+            version = "1.0.1"
 
             afterEvaluate {
                 from(components["release"])
