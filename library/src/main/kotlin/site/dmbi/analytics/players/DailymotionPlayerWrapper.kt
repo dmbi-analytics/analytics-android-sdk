@@ -8,6 +8,9 @@ import site.dmbi.analytics.DMBIAnalytics
 /**
  * Wrapper for Dailymotion Android Player that automatically tracks video analytics events.
  *
+ * Tracks: video impression, play, pause, and complete events.
+ * Note: Quartile progress tracking is not supported due to SDK limitations.
+ *
  * Usage:
  * ```kotlin
  * // Create player with wrapper listeners
@@ -28,11 +31,8 @@ class DailymotionPlayerWrapper {
     private var videoId: String? = null
     private var videoTitle: String? = null
     private var videoDuration: Float? = null
-    private var lastReportedQuartile: Int = 0
     private var hasTrackedImpression: Boolean = false
     private var isPlaying: Boolean = false
-    private var currentPosition: Float = 0f
-    private var totalDuration: Float = 0f
 
     /**
      * VideoListener to be passed to Dailymotion.createPlayer()
@@ -63,15 +63,6 @@ class DailymotionPlayerWrapper {
                 isPlaying = false
             }
         }
-
-        override fun onVideoTimeChange(playerView: PlayerView, time: Float) {
-            currentPosition = time
-            checkQuartileProgress()
-        }
-
-        override fun onVideoDurationChange(playerView: PlayerView, duration: Float) {
-            totalDuration = duration
-        }
     }
 
     /**
@@ -94,7 +85,6 @@ class DailymotionPlayerWrapper {
         this.videoId = videoId
         this.videoTitle = title
         this.videoDuration = duration
-        this.lastReportedQuartile = 0
         this.hasTrackedImpression = false
         this.isPlaying = false
     }
@@ -109,75 +99,41 @@ class DailymotionPlayerWrapper {
 
     private fun trackImpression() {
         val id = videoId ?: return
-        val duration = videoDuration ?: totalDuration.takeIf { it > 0 }
 
         DMBIAnalytics.trackVideoImpression(
             videoId = id,
             title = videoTitle,
-            duration = duration
+            duration = videoDuration
         )
     }
 
     private fun trackPlay() {
         val id = videoId ?: return
-        val duration = videoDuration ?: totalDuration.takeIf { it > 0 }
 
         DMBIAnalytics.trackVideoPlay(
             videoId = id,
             title = videoTitle,
-            duration = duration,
-            position = currentPosition
+            duration = videoDuration,
+            position = 0f
         )
     }
 
     private fun trackPause() {
         val id = videoId ?: return
-        val percent = calculatePercent()
 
         DMBIAnalytics.trackVideoPause(
             videoId = id,
-            position = currentPosition,
-            percent = percent
+            position = 0f,
+            percent = 0
         )
     }
 
     private fun trackComplete() {
         val id = videoId ?: return
-        val duration = videoDuration ?: totalDuration.takeIf { it > 0 }
 
         DMBIAnalytics.trackVideoComplete(
             videoId = id,
-            duration = duration
+            duration = videoDuration
         )
-    }
-
-    private fun trackQuartile(percent: Int) {
-        val id = videoId ?: return
-        val duration = videoDuration ?: totalDuration.takeIf { it > 0 }
-
-        DMBIAnalytics.trackVideoProgress(
-            videoId = id,
-            duration = duration,
-            position = currentPosition,
-            percent = percent
-        )
-    }
-
-    private fun calculatePercent(): Int {
-        val duration = videoDuration ?: totalDuration
-        if (duration <= 0) return 0
-        return ((currentPosition / duration) * 100).toInt()
-    }
-
-    private fun checkQuartileProgress() {
-        val percent = calculatePercent()
-        val quartiles = listOf(25, 50, 75, 100)
-
-        for (quartile in quartiles) {
-            if (percent >= quartile && lastReportedQuartile < quartile) {
-                trackQuartile(quartile)
-                lastReportedQuartile = quartile
-            }
-        }
     }
 }

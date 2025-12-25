@@ -4,7 +4,7 @@ plugins {
     id("maven-publish")
 }
 
-val sdkVersion = "1.0.8"
+val sdkVersion = "1.0.9"
 
 android {
     namespace = "site.dmbi.analytics"
