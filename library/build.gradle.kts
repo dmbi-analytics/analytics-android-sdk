@@ -4,7 +4,7 @@ plugins {
     id("maven-publish")
 }
 
-val sdkVersion = "1.0.4"
+val sdkVersion = "1.0.5"
 
 android {
     namespace = "site.dmbi.analytics"
@@ -58,7 +58,7 @@ dependencies {
     compileOnly("androidx.media3:media3-exoplayer:1.2.0")
     compileOnly("androidx.media3:media3-common:1.2.0")
     compileOnly("com.pierfrancescosoffritti.androidyoutubeplayer:core:12.1.0")
-    compileOnly("com.dailymotion.player.android:sdk:1.3.1")
+    compileOnly("com.dailymotion.player.android:sdk:1.2.7")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
