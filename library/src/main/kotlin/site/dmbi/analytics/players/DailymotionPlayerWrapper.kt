@@ -1,7 +1,8 @@
 package site.dmbi.analytics.players
 
-import com.dailymotion.android.player.sdk.PlayerWebView
-import com.dailymotion.android.player.sdk.events.*
+import com.dailymotion.player.android.sdk.PlayerView
+import com.dailymotion.player.android.sdk.listeners.VideoListener
+import com.dailymotion.player.android.sdk.listeners.PlayerListener
 import site.dmbi.analytics.DMBIAnalytics
 
 /**
@@ -9,20 +10,20 @@ import site.dmbi.analytics.DMBIAnalytics
  *
  * Usage:
  * ```kotlin
- * val playerWebView = findViewById<PlayerWebView>(R.id.dailymotionPlayer)
- *
- * val wrapper = DailymotionPlayerWrapper(playerWebView)
- * wrapper.attach(
- *     videoId = "x8abc123",
- *     title = "Video Title",
- *     duration = 180f
- * )
- *
- * // Load video
- * playerWebView.load(videoId = "x8abc123")
+ * // Create player with wrapper listeners
+ * Dailymotion.createPlayer(
+ *     context = context,
+ *     playerId = "YOUR_PLAYER_ID",
+ *     videoListener = wrapper.videoListener,
+ *     playerListener = wrapper.playerListener
+ * ) { player ->
+ *     playerView.setPlayer(player)
+ *     wrapper.attach(videoId = "x8abc123", title = "Video Title")
+ *     player.loadContent(videoId = "x8abc123")
+ * }
  * ```
  */
-class DailymotionPlayerWrapper(private val playerWebView: PlayerWebView) {
+class DailymotionPlayerWrapper {
 
     private var videoId: String? = null
     private var videoTitle: String? = null
@@ -30,45 +31,60 @@ class DailymotionPlayerWrapper(private val playerWebView: PlayerWebView) {
     private var lastReportedQuartile: Int = 0
     private var hasTrackedImpression: Boolean = false
     private var isPlaying: Boolean = false
-    private var currentPosition: Double = 0.0
-    private var totalDuration: Double = 0.0
+    private var currentPosition: Float = 0f
+    private var totalDuration: Float = 0f
 
-    private val eventListener = PlayerWebView.EventListener { event ->
-        when (event) {
-            is StartEvent -> {
-                if (!hasTrackedImpression) {
-                    trackImpression()
-                    hasTrackedImpression = true
-                }
+    /**
+     * VideoListener to be passed to Dailymotion.createPlayer()
+     */
+    val videoListener = object : VideoListener {
+        override fun onVideoStart(playerView: PlayerView) {
+            if (!hasTrackedImpression) {
+                trackImpression()
+                hasTrackedImpression = true
             }
-            is PlayEvent -> {
-                if (!isPlaying) {
-                    trackPlay()
-                    isPlaying = true
-                }
+        }
+
+        override fun onVideoEnd(playerView: PlayerView) {
+            trackComplete()
+            isPlaying = false
+        }
+
+        override fun onVideoPlay(playerView: PlayerView) {
+            if (!isPlaying) {
+                trackPlay()
+                isPlaying = true
             }
-            is PauseEvent -> {
-                if (isPlaying) {
-                    trackPause()
-                    isPlaying = false
-                }
-            }
-            is EndEvent -> {
-                trackComplete()
+        }
+
+        override fun onVideoPause(playerView: PlayerView) {
+            if (isPlaying) {
+                trackPause()
                 isPlaying = false
             }
-            is TimeUpdateEvent -> {
-                currentPosition = event.time
-                checkQuartileProgress()
-            }
-            is DurationChangeEvent -> {
-                totalDuration = event.duration
-            }
+        }
+
+        override fun onVideoTimeChange(playerView: PlayerView, time: Float) {
+            currentPosition = time
+            checkQuartileProgress()
+        }
+
+        override fun onVideoDurationChange(playerView: PlayerView, duration: Float) {
+            totalDuration = duration
         }
     }
 
     /**
-     * Attach analytics tracking to the Dailymotion player.
+     * PlayerListener to be passed to Dailymotion.createPlayer()
+     */
+    val playerListener = object : PlayerListener {
+        override fun onPlayerEnd(playerView: PlayerView) {
+            // Player ended
+        }
+    }
+
+    /**
+     * Attach analytics tracking with video metadata.
      *
      * @param videoId Dailymotion video ID
      * @param title Optional video title
@@ -81,22 +97,19 @@ class DailymotionPlayerWrapper(private val playerWebView: PlayerWebView) {
         this.lastReportedQuartile = 0
         this.hasTrackedImpression = false
         this.isPlaying = false
-
-        playerWebView.setEventListener(eventListener)
     }
 
     /**
-     * Detach analytics tracking from the player.
+     * Detach analytics tracking.
      */
     fun detach() {
-        playerWebView.setEventListener(null as PlayerWebView.EventListener?)
         videoId = null
         videoTitle = null
     }
 
     private fun trackImpression() {
         val id = videoId ?: return
-        val duration = videoDuration ?: totalDuration.toFloat().takeIf { it > 0 }
+        val duration = videoDuration ?: totalDuration.takeIf { it > 0 }
 
         DMBIAnalytics.trackVideoImpression(
             videoId = id,
@@ -107,13 +120,13 @@ class DailymotionPlayerWrapper(private val playerWebView: PlayerWebView) {
 
     private fun trackPlay() {
         val id = videoId ?: return
-        val duration = videoDuration ?: totalDuration.toFloat().takeIf { it > 0 }
+        val duration = videoDuration ?: totalDuration.takeIf { it > 0 }
 
         DMBIAnalytics.trackVideoPlay(
             videoId = id,
             title = videoTitle,
             duration = duration,
-            position = currentPosition.toFloat()
+            position = currentPosition
         )
     }
 
@@ -123,14 +136,14 @@ class DailymotionPlayerWrapper(private val playerWebView: PlayerWebView) {
 
         DMBIAnalytics.trackVideoPause(
             videoId = id,
-            position = currentPosition.toFloat(),
+            position = currentPosition,
             percent = percent
         )
     }
 
     private fun trackComplete() {
         val id = videoId ?: return
-        val duration = videoDuration ?: totalDuration.toFloat().takeIf { it > 0 }
+        val duration = videoDuration ?: totalDuration.takeIf { it > 0 }
 
         DMBIAnalytics.trackVideoComplete(
             videoId = id,
@@ -140,20 +153,20 @@ class DailymotionPlayerWrapper(private val playerWebView: PlayerWebView) {
 
     private fun trackQuartile(percent: Int) {
         val id = videoId ?: return
-        val duration = videoDuration ?: totalDuration.toFloat().takeIf { it > 0 }
+        val duration = videoDuration ?: totalDuration.takeIf { it > 0 }
 
         DMBIAnalytics.trackVideoProgress(
             videoId = id,
             duration = duration,
-            position = currentPosition.toFloat(),
+            position = currentPosition,
             percent = percent
         )
     }
 
     private fun calculatePercent(): Int {
-        val duration = videoDuration ?: totalDuration.toFloat()
+        val duration = videoDuration ?: totalDuration
         if (duration <= 0) return 0
-        return ((currentPosition.toFloat() / duration) * 100).toInt()
+        return ((currentPosition / duration) * 100).toInt()
     }
 
     private fun checkQuartileProgress() {

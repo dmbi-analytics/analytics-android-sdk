@@ -30,7 +30,7 @@ Add the dependency:
 
 ```gradle
 dependencies {
-    implementation 'com.github.dmbi-analytics:analytics-android-sdk:1.0.6'
+    implementation 'com.github.dmbi-analytics:analytics-android-sdk:1.0.7'
 }
 ```
 
@@ -200,12 +200,18 @@ youTubePlayerView.addYouTubePlayerListener(object : AbstractYouTubePlayerListene
 
 import site.dmbi.analytics.players.DailymotionPlayerWrapper
 
-val playerWebView = findViewById<PlayerWebView>(R.id.dailymotionPlayer)
-val wrapper = DailymotionPlayerWrapper(playerWebView)
-wrapper.attach(
-    videoId = "x8abc123",
-    title = "Video Title"
-)
+val wrapper = DailymotionPlayerWrapper()
+
+Dailymotion.createPlayer(
+    context = context,
+    playerId = "YOUR_PLAYER_ID",
+    videoListener = wrapper.videoListener,
+    playerListener = wrapper.playerListener
+) { player ->
+    playerView.setPlayer(player)
+    wrapper.attach(videoId = "x8abc123", title = "Video Title")
+    player.loadContent(videoId = "x8abc123")
+}
 ```
 
 ### 7. Push Notifications
