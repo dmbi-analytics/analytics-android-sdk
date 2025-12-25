@@ -30,7 +30,7 @@ Add the dependency:
 
 ```gradle
 dependencies {
-    implementation 'com.github.dmbi-analytics:analytics-android-sdk:1.0.5'
+    implementation 'com.github.dmbi-analytics:analytics-android-sdk:1.0.6'
 }
 ```
 
@@ -195,11 +195,13 @@ youTubePlayerView.addYouTubePlayerListener(object : AbstractYouTubePlayerListene
 
 **Dailymotion Player:**
 ```kotlin
-// Add dependency: implementation("com.dailymotion.player.android:sdk:1.3.1")
+// Add dependency: implementation("com.dailymotion.player.android:sdk:1.2.7")
+// Add repository: maven { url = uri("https://mvn.dailymotion.com/repository/releases/") }
 
 import site.dmbi.analytics.players.DailymotionPlayerWrapper
 
-val wrapper = DailymotionPlayerWrapper(playerView)
+val playerWebView = findViewById<PlayerWebView>(R.id.dailymotionPlayer)
+val wrapper = DailymotionPlayerWrapper(playerWebView)
 wrapper.attach(
     videoId = "x8abc123",
     title = "Video Title"

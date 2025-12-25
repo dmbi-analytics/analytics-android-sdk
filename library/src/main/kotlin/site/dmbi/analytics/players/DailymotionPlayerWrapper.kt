@@ -1,8 +1,7 @@
 package site.dmbi.analytics.players
 
-import com.dailymotion.player.android.sdk.Dailymotion
-import com.dailymotion.player.android.sdk.PlayerView
-import com.dailymotion.player.android.sdk.listeners.PlayerListener
+import com.dailymotion.android.player.sdk.PlayerWebView
+import com.dailymotion.android.player.sdk.events.*
 import site.dmbi.analytics.DMBIAnalytics
 
 /**
@@ -10,23 +9,20 @@ import site.dmbi.analytics.DMBIAnalytics
  *
  * Usage:
  * ```kotlin
- * val playerView = findViewById<PlayerView>(R.id.dailymotionPlayer)
+ * val playerWebView = findViewById<PlayerWebView>(R.id.dailymotionPlayer)
  *
- * Dailymotion.createPlayer(context, playerId = "your-player-id") { player ->
- *     playerView.setPlayer(player)
+ * val wrapper = DailymotionPlayerWrapper(playerWebView)
+ * wrapper.attach(
+ *     videoId = "x8abc123",
+ *     title = "Video Title",
+ *     duration = 180f
+ * )
  *
- *     val wrapper = DailymotionPlayerWrapper(playerView)
- *     wrapper.attach(
- *         videoId = "x8abc123",
- *         title = "Video Title",
- *         duration = 180f
- *     )
- *
- *     player.loadContent(videoId = "x8abc123")
- * }
+ * // Load video
+ * playerWebView.load(videoId = "x8abc123")
  * ```
  */
-class DailymotionPlayerWrapper(private val playerView: PlayerView) {
+class DailymotionPlayerWrapper(private val playerWebView: PlayerWebView) {
 
     private var videoId: String? = null
     private var videoTitle: String? = null
@@ -37,56 +33,38 @@ class DailymotionPlayerWrapper(private val playerView: PlayerView) {
     private var currentPosition: Double = 0.0
     private var totalDuration: Double = 0.0
 
-    private val playerListener = object : PlayerListener {
-
-        override fun onVideoStart() {
-            if (!hasTrackedImpression) {
-                trackImpression()
-                hasTrackedImpression = true
+    private val eventListener = PlayerWebView.EventListener { event ->
+        when (event) {
+            is StartEvent -> {
+                if (!hasTrackedImpression) {
+                    trackImpression()
+                    hasTrackedImpression = true
+                }
             }
-        }
-
-        override fun onPlay() {
-            if (!isPlaying) {
-                trackPlay()
-                isPlaying = true
+            is PlayEvent -> {
+                if (!isPlaying) {
+                    trackPlay()
+                    isPlaying = true
+                }
             }
-        }
-
-        override fun onPause() {
-            if (isPlaying) {
-                trackPause()
+            is PauseEvent -> {
+                if (isPlaying) {
+                    trackPause()
+                    isPlaying = false
+                }
+            }
+            is EndEvent -> {
+                trackComplete()
                 isPlaying = false
             }
+            is TimeUpdateEvent -> {
+                currentPosition = event.time
+                checkQuartileProgress()
+            }
+            is DurationChangeEvent -> {
+                totalDuration = event.duration
+            }
         }
-
-        override fun onVideoEnd() {
-            trackComplete()
-            isPlaying = false
-        }
-
-        override fun onTimeUpdate(time: Double) {
-            currentPosition = time
-            checkQuartileProgress()
-        }
-
-        override fun onDurationChange(duration: Double) {
-            totalDuration = duration
-        }
-
-        // Other required overrides with empty implementations
-        override fun onVideoChange(videoId: String) {}
-        override fun onPlaylistItemChange(videoId: String, index: Int) {}
-        override fun onPlaylistChange(playlist: List<String>) {}
-        override fun onQualitiesAvailable(qualities: List<String>) {}
-        override fun onQualityChange(quality: String) {}
-        override fun onSeekStart(time: Double) {}
-        override fun onSeekEnd(time: Double) {}
-        override fun onVolumeChange(volume: Double) {}
-        override fun onFullscreenChange(isFullscreen: Boolean) {}
-        override fun onBuffering() {}
-        override fun onPlaying() {}
-        override fun onError(error: String) {}
     }
 
     /**
@@ -104,14 +82,14 @@ class DailymotionPlayerWrapper(private val playerView: PlayerView) {
         this.hasTrackedImpression = false
         this.isPlaying = false
 
-        playerView.addListener(playerListener)
+        playerWebView.setEventListener(eventListener)
     }
 
     /**
      * Detach analytics tracking from the player.
      */
     fun detach() {
-        playerView.removeListener(playerListener)
+        playerWebView.setEventListener(null as PlayerWebView.EventListener?)
         videoId = null
         videoTitle = null
     }
