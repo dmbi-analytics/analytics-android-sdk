@@ -9,9 +9,8 @@ import solutions.capra.analytics.CapraAnalytics
  * Wrapper for Dailymotion Android Player that automatically tracks video analytics events.
  *
  * Tracks: video impression, play, pause, and complete events.
- * Auto-play Support: Automatically detects video changes (including auto-play) and tracks
- * each video with the correct video ID using getState() API on video start.
  * Note: Quartile progress tracking is not supported due to SDK limitations.
+ * Note: For auto-play scenarios, call attach() with new video metadata when video changes.
  *
  * Usage:
  * ```kotlin
@@ -42,9 +41,6 @@ class DailymotionPlayerWrapper {
      */
     val videoListener = object : VideoListener {
         override fun onVideoStart(playerView: PlayerView) {
-            // Check for video change (auto-play scenario)
-            checkForVideoChange(playerView)
-
             if (!hasTrackedImpression) {
                 trackImpression()
                 hasTrackedImpression = true
@@ -78,33 +74,6 @@ class DailymotionPlayerWrapper {
         override fun onPlayerEnd(playerView: PlayerView) {
             // Player ended
         }
-    }
-
-    /**
-     * Check if video has changed using getState callback.
-     * Called on each video start to detect auto-play scenarios.
-     */
-    private fun checkForVideoChange(playerView: PlayerView) {
-        try {
-            playerView.getState(object : PlayerView.PlayerStateCallback {
-                override fun onPlayerStateReceived(view: PlayerView, state: PlayerView.PlayerState) {
-                    val newVideoId = state.videoId
-                    if (newVideoId != null && newVideoId.isNotEmpty() && newVideoId != videoId) {
-                        handleVideoChange(newVideoId, state.videoTitle, state.videoDuration?.toFloat())
-                    }
-                }
-            })
-        } catch (e: Exception) {
-            // getState not available in this SDK version, skip auto-play detection
-        }
-    }
-
-    private fun handleVideoChange(newVideoId: String, title: String?, duration: Float?) {
-        videoId = newVideoId
-        videoTitle = title
-        videoDuration = duration
-        hasTrackedImpression = false
-        isPlaying = false
     }
 
     /**

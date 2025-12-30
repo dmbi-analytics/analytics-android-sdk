@@ -4,7 +4,7 @@ plugins {
     id("maven-publish")
 }
 
-val sdkVersion = "2.5.2"
+val sdkVersion = "2.5.3"
 
 android {
     namespace = "solutions.capra.analytics"
