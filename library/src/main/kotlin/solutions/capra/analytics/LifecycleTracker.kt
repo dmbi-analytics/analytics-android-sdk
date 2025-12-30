@@ -20,7 +20,7 @@ internal class LifecycleTracker(
     fun configure(
         tracker: EventTracker,
         sessionManager: SessionManager,
-        heartbeatManager: HeartbeatManager
+        heartbeatManager: HeartbeatManager?
     ) {
         this.tracker = tracker
         this.sessionManager = sessionManager

@@ -8,7 +8,9 @@ data class CapraConfiguration(
     val siteId: String,
     /** Analytics endpoint URL */
     val endpoint: String,
-    /** Heartbeat interval in milliseconds (default: 30 seconds) */
+    /** Enable heartbeat tracking (default: false - disabled, not needed as concurrent users are calculated from pageview events) */
+    val heartbeatEnabled: Boolean = false,
+    /** Heartbeat interval in milliseconds (default: 30 seconds, only used if heartbeatEnabled is true) */
     val heartbeatInterval: Long = 30_000L,
     /** Maximum heartbeat interval when user is inactive (default: 120 seconds) */
     val maxHeartbeatInterval: Long = 120_000L,
@@ -32,6 +34,7 @@ data class CapraConfiguration(
     val autoScrollTracking: Boolean = true
 ) {
     class Builder(private val siteId: String, private val endpoint: String) {
+        private var heartbeatEnabled: Boolean = false
         private var heartbeatInterval: Long = 30_000L
         private var maxHeartbeatInterval: Long = 120_000L
         private var inactivityThreshold: Long = 30_000L
@@ -44,6 +47,7 @@ data class CapraConfiguration(
         private var offlineRetentionDays: Int = 7
         private var autoScrollTracking: Boolean = true
 
+        fun heartbeatEnabled(enabled: Boolean) = apply { heartbeatEnabled = enabled }
         fun heartbeatInterval(interval: Long) = apply { heartbeatInterval = interval }
         fun maxHeartbeatInterval(interval: Long) = apply { maxHeartbeatInterval = interval }
         fun inactivityThreshold(threshold: Long) = apply { inactivityThreshold = threshold }
@@ -59,6 +63,7 @@ data class CapraConfiguration(
         fun build() = CapraConfiguration(
             siteId = siteId,
             endpoint = endpoint,
+            heartbeatEnabled = heartbeatEnabled,
             heartbeatInterval = heartbeatInterval,
             maxHeartbeatInterval = maxHeartbeatInterval,
             inactivityThreshold = inactivityThreshold,
